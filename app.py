@@ -30,11 +30,37 @@ git_url_with_credentials = f'https://{git_username}:{git_password}@{parsed_url.n
 SECRET_TOKEN = os.getenv('WEBHOOK_SECRET', '')  # Get from .env or leave empty
 
 
+def git_pull():
+    # Check if repository exists locally
+    if not os.path.exists(repo_path):
+        print(f"Repository does not exist locally. Cloning into {repo_path}...")
+        command = ['git', 'clone', git_url_with_credentials, repo_path]
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        message = "Repository cloned successfully"
+    else:
+        print(f"Repository exists at {repo_path}. Performing git pull...")
+        command = ['git', 'pull']
+        result = subprocess.run(command, check=True, capture_output=True, text=True, cwd=repo_path)
+        message = "Git pull executed successfully"
+
+    return message, result
+    
+
+@app.route('/', methods=['GET'])
+def index():
+    git_pull()
+    return jsonify({'status': 'success', 'message': 'git_pull() called'}), 200
+
+
+
+
+
+
 # @app.route('/webhook', methods=['POST'])
 @app.route('/webhook', methods=['POST'])
 def webhook():
 
-    return jsonify({'status': 'success', 'message': 'hi'}), 200
+    # return jsonify({'status': 'success', 'message': 'hi'}), 200
     # Verify the token if set
     if SECRET_TOKEN:
         gitlab_token = request.headers.get('X-Gitlab-Token')
@@ -47,18 +73,8 @@ def webhook():
     # Process push events
     if event_type == 'Push Hook':
         try:
-            # Check if repository exists locally
-            if not os.path.exists(repo_path):
-                print(f"Repository does not exist locally. Cloning into {repo_path}...")
-                command = ['git', 'clone', git_url_with_credentials, repo_path]
-                result = subprocess.run(command, check=True, capture_output=True, text=True)
-                message = "Repository cloned successfully"
-            else:
-                print(f"Repository exists at {repo_path}. Performing git pull...")
-                command = ['git', 'pull']
-                result = subprocess.run(command, check=True, capture_output=True, text=True, cwd=repo_path)
-                message = "Git pull executed successfully"
-            
+
+            message, result = git_pull()
             # Log the result
             print(f"{message}: {result.stdout}")
             
