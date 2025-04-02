@@ -31,7 +31,7 @@ SECRET_TOKEN = os.getenv('WEBHOOK_SECRET', '')  # Get from .env or leave empty
 
 
 # @app.route('/webhook', methods=['POST'])
-@app.route('/', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
 
     return jsonify({'status': 'success', 'message': 'hi'}), 200
