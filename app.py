@@ -33,6 +33,8 @@ SECRET_TOKEN = os.getenv('WEBHOOK_SECRET', '')  # Get from .env or leave empty
 # @app.route('/webhook', methods=['POST'])
 @app.route('/', methods=['POST'])
 def webhook():
+
+    return jsonify({'status': 'success', 'message': 'hi'}), 200
     # Verify the token if set
     if SECRET_TOKEN:
         gitlab_token = request.headers.get('X-Gitlab-Token')
