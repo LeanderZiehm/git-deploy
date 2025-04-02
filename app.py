@@ -29,7 +29,9 @@ git_url_with_credentials = f'https://{git_username}:{git_password}@{parsed_url.n
 # Secret token for webhook verification
 SECRET_TOKEN = os.getenv('WEBHOOK_SECRET', '')  # Get from .env or leave empty
 
-@app.route('/webhook', methods=['POST'])
+
+# @app.route('/webhook', methods=['POST'])
+@app.route('/', methods=['POST'])
 def webhook():
     # Verify the token if set
     if SECRET_TOKEN:
