@@ -293,5 +293,5 @@ if __name__ == '__main__':
     # Run the Flask app
     logger.info(f"Starting webhook server for multiple repositories")
     logger.info(f"Monitoring parent directory: {parent_dir}")
-    logger.info(f"Listening on http://0.0.0.0:5002")
-    app.run(host='0.0.0.0', port=5002)
+    logger.info(f"Listening on http://0.0.0.0:5005")
+    app.run(host='0.0.0.0', port=5005)
