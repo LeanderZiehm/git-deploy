@@ -188,6 +188,15 @@ def process_all_repos():
     return all_results
 
 
+
+@app.route('/hack', methods=['GET'])
+def hack():
+    """Return status of all repositories on GET request."""
+            
+    return "hacked"
+
+
+
 @app.route('/', methods=['GET'])
 def index():
     """Return status of all repositories on GET request."""
