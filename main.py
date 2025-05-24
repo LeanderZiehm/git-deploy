@@ -187,6 +187,9 @@ def process_all():
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE, last_run=state['last_run'], repos=state['repos'])
+@app.route('/hack')
+def hack():
+    return "hack"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
