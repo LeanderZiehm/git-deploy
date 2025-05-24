@@ -10,9 +10,7 @@ import threading
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
-import hotreloader
-
-broken
+# import hotreloader
 
 # Logging config
 logging.basicConfig(
