@@ -8,7 +8,7 @@ import subprocess
 import logging
 import threading
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
 import hotreloader
 
@@ -36,50 +36,6 @@ state = {
     'last_run': None,
     'repos': []  # list of dicts: name, broken, rollbacks, commit_hash, commit_count
 }
-
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Repo Dashboard</title>
-  <style>
-    body { font-family: sans-serif; margin: 2rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
-    th { background: #f5f5f5; }
-    .error { color: red; }
-  </style>
-</head>
-<body>
-  <h1>Repository Dashboard</h1>
-  <p>Last webhook run: {{ last_run or 'Never' }}</p>
-  <p>Total repos: {{ repos|length }}</p>
-  <button onclick="trigger()">Refresh (Trigger Pull)</button>
-  <table>
-    <thead>
-      <tr><th>Name</th><th>Broken</th><th>Rollbacks</th><th>Commit Hash</th><th>Commit Count</th></tr>
-    </thead>
-    <tbody>
-      {% for r in repos %}
-      <tr>
-        <td>{{ r.name }}</td>
-        <td class="{{ 'error' if r.broken else '' }}">{{ 'Yes' if r.broken else 'No' }}</td>
-        <td>{{ r.rollbacks }}</td>
-        <td>{{ r.commit_hash }}</td>
-        <td>{{ r.commit_count }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-<script>
-function trigger() {
-  fetch('/webhook', { method: 'POST' }).then(r => r.json()).then(data => location.reload());
-}
-</script>
-</body>
-</html>
-'''
 
 def get_repos():
     repos = []
@@ -188,10 +144,14 @@ def process_all():
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_TEMPLATE, last_run=state['last_run'], repos=state['repos'])
-@app.route('/hack')
-def hack():
-    return "hack"
+    return send_from_directory('static', 'index.html')
+
+@app.route('/status', methods=['GET'])
+def status():
+    return jsonify({
+        'last_run': state['last_run'],
+        'repos': state['repos']
+    })
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -199,7 +159,6 @@ def webhook():
         token = request.headers.get('X-Webhook-Token', '')
         if token != SECRET_TOKEN:
             return jsonify({'status': 'error', 'message': 'Invalid token'}), 401
-    # run in thread to avoid blocking UI
     thread = threading.Thread(target=process_all)
     thread.start()
     return jsonify({'status': 'started'})
@@ -207,4 +166,4 @@ def webhook():
 if __name__ == '__main__':
     # initial load
     process_all()
-    app.run(host='0.0.0.0', port=5005)
+    app.run(host='0.0.0.0', port=5005,debug=True,use_reloader=True)
