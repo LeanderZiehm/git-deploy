@@ -161,6 +161,12 @@ def webhook():
     thread.start()
     return jsonify({'status': 'started'})
 
+@app.route('/kinnari')
+def kinnari():
+    return "kinnari"
+
+
+
 if __name__ == '__main__':
     # initial load
     process_all()
