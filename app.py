@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import time
 import logging
 from urllib.parse import urlparse
+import argparse
+
 
 # Configure logging
 logging.basicConfig(
@@ -286,6 +288,10 @@ def webhook():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Webhook server for Git repositories")
+    parser.add_argument('--port', type=int, default=5005, help='Port number to run the server on (default: 5005)')
+    args = parser.parse_args()
+    port = args.port
     # Check if credentials are available
     if not git_username or not git_password:
         logger.warning("Git credentials not found in .env file. Webhook may fail for private repositories.")
@@ -302,5 +308,5 @@ if __name__ == '__main__':
     # Run the Flask app
     logger.info(f"Starting webhook server for multiple repositories")
     logger.info(f"Monitoring parent directory: {parent_dir}")
-    logger.info(f"Listening on http://0.0.0.0:5005")
-    app.run(host='0.0.0.0', port=5005)
+    logger.info(f"Listening on http://0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port)
