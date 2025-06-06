@@ -10,6 +10,7 @@ import threading
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from dotenv import load_dotenv
+import argparse
 # import hotreloader
 
 # Logging config
@@ -168,6 +169,12 @@ def kinnari():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Webhook server for Git repositories")
+    parser.add_argument('--port', type=int, default=5005, help='Port number to run the server on (default: 5005)')
+    args = parser.parse_args()
+    port = args.port
     # initial load
     process_all()
-    app.run(host='0.0.0.0', port=5005,debug=True,use_reloader=True)
+    logger.info(f"Listening on http://0.0.0.0:{port}")
+    # app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port,debug=True,use_reloader=True)
