@@ -9,14 +9,43 @@
     th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
     th { background: #f5f5f5; }
     .error { color: red; }
+
+    /* Spinner styles */
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .changed {
+  background-color: #e6f4ff !important; /* light blue */
+  transition: background-color 2s ease;
+}
+
   </style>
-<link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <h1>Repository Dashboard</h1>
+
   <p id="last-run">Last webhook run: Loading...</p>
   <p id="repo-count">Total repos: Loading...</p>
-  <button onclick="trigger()">Refresh (Trigger Pull)</button>
+
+  <div id="spinner" style="display:none; margin-bottom: 1rem;">
+    <span class="loader"></span> Refreshing...
+  </div>
+
+  <button id="refresh-btn" onclick="trigger()">Refresh (Trigger Pull)</button>
+
   <table id="repo-table">
     <thead>
       <tr><th>Name</th><th>Broken</th><th>Rollbacks</th><th>Commit Hash</th><th>Commit Count</th></tr>
@@ -25,30 +54,64 @@
   </table>
 
   <script>
-    async function loadStatus() {
-      const res = await fetch('/status');
-      const data = await res.json();
-      document.getElementById('last-run').innerText = `Last webhook run: ${data.last_run || 'Never'}`;
-      document.getElementById('repo-count').innerText = `Total repos: ${data.repos.length}`;
+   let previousRepos = [];
 
-      const tbody = document.querySelector('#repo-table tbody');
-      tbody.innerHTML = '';
-      data.repos.forEach(r => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${r.name}</td>
-          <td class="${r.broken ? 'error' : ''}">${r.broken ? 'Yes' : 'No'}</td>
-          <td>${r.rollbacks}</td>
-          <td>${r.commit_hash}</td>
-          <td>${r.commit_count}</td>
-        `;
-        tbody.appendChild(row);
-      });
+async function loadStatus() {
+  const res = await fetch('/status');
+  const data = await res.json();
+
+  document.getElementById('last-run').innerText = `Last webhook run: ${data.last_run || 'Never'}`;
+  document.getElementById('repo-count').innerText = `Total repos: ${data.repos.length}`;
+
+  const tbody = document.querySelector('#repo-table tbody');
+  tbody.innerHTML = '';
+
+  data.repos.forEach((r, idx) => {
+    const row = document.createElement('tr');
+
+    const prev = previousRepos.find(p => p.name === r.name);
+    const isChanged = !prev || JSON.stringify(prev) !== JSON.stringify(r);
+
+    row.innerHTML = `
+      <td>${r.name}</td>
+      <td class="${r.broken ? 'error' : ''}">${r.broken ? 'Yes' : 'No'}</td>
+      <td>${r.rollbacks}</td>
+      <td>${r.commit_hash}</td>
+      <td>${r.commit_count}</td>
+    `;
+
+    if (isChanged) {
+      row.classList.add('changed');
+      // Optional: fade highlight after 4s
+      setTimeout(() => {
+        row.classList.remove('changed');
+      }, 4000);
     }
 
+    tbody.appendChild(row);
+  });
+
+  previousRepos = data.repos;
+}
+
+
     async function trigger() {
+      const oldData = await fetch('/status').then(res => res.json());
+      const oldRun = oldData.last_run;
+
+      document.getElementById('spinner').style.display = 'block';
+      document.getElementById('last-run').innerText = 'Last webhook run: Refreshing...';
+
       await fetch('/webhook', { method: 'POST' });
-      setTimeout(loadStatus, 3000); // wait a bit for the background thread
+
+      const pollInterval = setInterval(async () => {
+        const newData = await fetch('/status').then(res => res.json());
+        if (newData.last_run !== oldRun) {
+          clearInterval(pollInterval);
+          document.getElementById('spinner').style.display = 'none';
+          loadStatus();
+        }
+      }, 1000);
     }
 
     loadStatus();
