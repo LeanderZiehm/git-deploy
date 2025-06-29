@@ -48,7 +48,7 @@
 
   <table id="repo-table">
     <thead>
-      <tr><th>Name</th><th>Broken</th><th>Rollbacks</th><th>Commit Hash</th><th>Commit Count</th></tr>
+      <tr><th>Name</th><th>Commit Count</th><th>Commit Hash</th><th>Broken</th><th>Rollbacks</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -74,10 +74,12 @@ async function loadStatus() {
 
     row.innerHTML = `
       <td>${r.name}</td>
+      <td>${r.commit_count}</td>
+      <td>${r.commit_hash}</td>
       <td class="${r.broken ? 'error' : ''}">${r.broken ? 'Yes' : 'No'}</td>
       <td>${r.rollbacks}</td>
-      <td>${r.commit_hash}</td>
-      <td>${r.commit_count}</td>
+
+  
     `;
 
     if (isChanged) {
