@@ -57,6 +57,7 @@ def dashboard():
     <html>
     <head>
     <title>Git Dashboard</title>
+    <script defer src="https://umami.leanderziehm.com/script.js" data-website-id="68133e03-fa69-40c4-a1c8-bd2c641533eb"></script>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f7f7f7; }
         h1 { color: #333; }
