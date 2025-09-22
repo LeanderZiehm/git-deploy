@@ -18,6 +18,9 @@ def get_git_info(repo_path: Path):
         except subprocess.CalledProcessError:
             return None
 
+    # Make sure remote refs are up to date
+    subprocess.run(["git", "fetch"], cwd=repo_path, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
     local_commit = run_git(["rev-parse", "HEAD"])
     remote_commit = run_git(["rev-parse", "origin/" + branch])
