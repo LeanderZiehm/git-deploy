@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard — Deploy</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Roboto, Arial; margin: 0; padding: 1rem; background: #f7f7fb; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem; }
+    .container { display:flex; gap: 2rem; }
+    .left { flex: 1; }
+    .right { width: 380px; background:white; padding:1rem; border-radius:8px; box-shadow:0 0 8px rgba(0,0,0,0.04); }
+    input[type="text"], textarea { width:100%; padding:0.5rem; margin-top:0.5rem; }
+    table { width:100%; border-collapse: collapse; margin-top:0.5rem; }
+    tr { cursor: pointer; }
+    tr:hover { background:#eef; }
+    .repo-row.selected { background:#d6f0d6; }
+    button { padding:0.6rem 1rem; border-radius:6px; border:none; background:#2563eb; color:white; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h2>Deploy Dashboard</h2>
+      <div><small>Signed in as <strong>{{ github_login }}</strong> ({{ email }})</small></div>
+    </div>
+    <div>
+      <form method="get" action="/">
+        <button type="submit">Sign out (close session)</button>
+      </form>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="left">
+      <div style="background:white; padding:1rem; border-radius:8px;">
+        <label>Search repos</label>
+        <input id="search" type="text" placeholder="filter repositories by name..." />
+
+        <table id="repo-table">
+          <thead><tr><th>Repo</th></tr></thead>
+          <tbody>
+            {% for r in repos %}
+            <tr class="repo-row" data-full="{{ r.full_name }}" data-owner="{{ r.owner }}" data-name="{{ r.name }}">
+              <td>{{ r.full_name }} {% if r.private %} (private) {% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="right">
+      <h3>Selected repo</h3>
+      <div id="selected">None</div>
+
+      <form id="deploy-form" method="post" action="/deploy">
+        <input type="hidden" name="repo_full_name" id="repo_full_name" required />
+        <label>App port</label>
+        <input type="number" name="app_port" id="app_port" value="{{ default_port }}" required />
+
+        <label style="margin-top:.5rem">Additional .env entries (key=value each line)</label>
+        <textarea name="env_text" rows="6" placeholder="EXAMPLE_KEY=example_value"></textarea>
+
+        <label style="display:block; margin-top:0.6rem">
+          <input type="checkbox" name="start_after_deploy" /> Start after deploy (attempt to run uvicorn main:app)
+        </label>
+
+        <div style="margin-top:1rem;">
+          <button type="submit">Confirm & Deploy</button>
+        </div>
+      </form>
+
+      <div id="status" style="margin-top:1rem; font-size:0.95rem;"></div>
+    </div>
+  </div>
+
+<script>
+  const rows = document.querySelectorAll(".repo-row");
+  const selectedDiv = document.getElementById("selected");
+  const repoInput = document.getElementById("repo_full_name");
+
+  rows.forEach(r => {
+    r.addEventListener("click", () => {
+      rows.forEach(rr => rr.classList.remove("selected"));
+      r.classList.add("selected");
+      const full = r.getAttribute("data-full");
+      selectedDiv.textContent = full;
+      repoInput.value = full;
+    });
+  });
+
+  const search = document.getElementById("search");
+  search.addEventListener("input", (e) => {
+    const q = e.target.value.toLowerCase();
+    rows.forEach(r => {
+      const txt = r.textContent.toLowerCase();
+      r.style.display = txt.indexOf(q) === -1 ? "none" : "";
+    });
+  });
+
+  // intercept deploy form to show status message
+  const form = document.getElementById("deploy-form");
+  const status = document.getElementById("status");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    status.textContent = "Deploying... this may take a minute.";
+    const data = new FormData(form);
+    const resp = await fetch("/deploy", { method: "POST", body: data });
+    const json = await resp.json();
+    if (resp.ok) {
+      status.textContent = "Deployment finished: " + JSON.stringify(json.result);
+    } else {
+      status.textContent = "Error: " + JSON.stringify(json);
+    }
+  });
+</script>
+</body>
+</html>
