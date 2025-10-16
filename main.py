@@ -1,15 +1,19 @@
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 import subprocess
-import os
 from pathlib import Path
 
 app = FastAPI(title="Git Dashboard")
 
-def run_git(cmd):
+
+def run_git(cmd, repo_path: Path):
+    """Run a git command safely, without prompting for credentials."""
     try:
         return subprocess.check_output(
-            ["git"] + cmd, cwd=repo_path, stderr=subprocess.DEVNULL, env={"GIT_TERMINAL_PROMPT": "0"}
+            ["git"] + cmd,
+            cwd=repo_path,
+            stderr=subprocess.DEVNULL,
+            env={"GIT_TERMINAL_PROMPT": "0"}  # disable interactive prompts
         ).decode().strip()
     except subprocess.CalledProcessError:
         return None
@@ -19,25 +23,25 @@ def get_git_info(repo_path: Path):
     if not (repo_path / ".git").exists():
         return None
 
-    # Make sure remote refs are up to date
+    # Try to fetch remote, skip if inaccessible
     subprocess.run(
-        ["git", "fetch"], 
-        cwd=repo_path, 
-        stdout=subprocess.DEVNULL, 
-        stderr=subprocess.DEVNULL, 
+        ["git", "fetch"],
+        cwd=repo_path,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         env={"GIT_TERMINAL_PROMPT": "0"}
     )
 
-    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
-    local_commit = run_git(["rev-parse", "HEAD"])
-    remote_commit = run_git(["rev-parse", "origin/" + branch]) if branch else None
+    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"], repo_path)
+    local_commit = run_git(["rev-parse", "HEAD"], repo_path)
+    remote_commit = run_git(["rev-parse", f"origin/{branch}"], repo_path) if branch else None
 
     if not branch or not local_commit:
         return None  # skip inaccessible repo
 
-    ahead_behind = run_git(["rev-list", "--left-right", "--count", f"{branch}...origin/{branch}"])
-    last_local_commit_date = run_git(["log", "-1", "--format=%ci", branch])
-    last_remote_commit_date = run_git(["log", "-1", "--format=%ci", f"origin/{branch}"]) if remote_commit else None
+    ahead_behind = run_git(["rev-list", "--left-right", "--count", f"{branch}...origin/{branch}"], repo_path)
+    last_local_commit_date = run_git(["log", "-1", "--format=%ci", branch], repo_path)
+    last_remote_commit_date = run_git(["log", "-1", "--format=%ci", f"origin/{branch}"], repo_path) if remote_commit else None
 
     ahead, behind = (0, 0)
     if ahead_behind:
@@ -71,19 +75,19 @@ def dashboard():
     html = """
     <html>
     <head>
-    <title>Git Dashboard</title>
-    <script defer src="https://umami.leanderziehm.com/script.js" data-website-id="66e46def-18be-4149-8bde-c9dab2b84208"></script>
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #f7f7f7; }
-        h1 { color: #333; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #4682B4; color: white; }
-        tr:nth-child(even) { background-color: #f2f2f2; }
-        tr.outdated { background-color: #ffe6e6; } /* light red for outdated repos */
-        button { background-color: #4682B4; color: white; border: none; padding: 5px 10px; cursor: pointer; }
-        button:hover { background-color: #5a9bd3; }
-    </style>
+        <title>Git Dashboard</title>
+        <script defer src="https://umami.leanderziehm.com/script.js" data-website-id="66e46def-18be-4149-8bde-c9dab2b84208"></script>
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f7f7f7; }
+            h1 { color: #333; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background-color: #4682B4; color: white; }
+            tr:nth-child(even) { background-color: #f2f2f2; }
+            tr.outdated { background-color: #ffe6e6; } /* light red for outdated repos */
+            button { background-color: #4682B4; color: white; border: none; padding: 5px 10px; cursor: pointer; }
+            button:hover { background-color: #5a9bd3; }
+        </style>
     </head>
     <body>
     <h1>Git Dashboard</h1>
@@ -102,18 +106,23 @@ def dashboard():
         html += f"<td>{repo['remote_commit'][:7] if repo['remote_commit'] else 'N/A'}</td>"
         html += f"<td>{repo['last_local_commit_date']}</td>"
         html += f"<td>{repo['last_remote_commit_date']}</td>"
-
-        html += f"</tr>"
+        html += "</tr>"
 
     html += "</table></body></html>"
     return HTMLResponse(content=html)
+
 
 @app.post("/pull")
 def pull_repo(repo_path: str = Form(...)):
     repo = Path(repo_path)
     if repo.exists() and (repo / ".git").exists():
         try:
-            subprocess.check_output(["git", "pull"], cwd=repo)
+            subprocess.check_output(
+                ["git", "pull"],
+                cwd=repo,
+                stderr=subprocess.DEVNULL,
+                env={"GIT_TERMINAL_PROMPT": "0"}  # prevent hanging on private repos
+            )
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull {repo}: {e}")
     return RedirectResponse("/", status_code=303)
