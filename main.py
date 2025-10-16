@@ -10,23 +10,25 @@ def get_git_info(repo_path: Path):
     if not (repo_path / ".git").exists():
         return None
 
-    def run_git(cmd):
-        try:
-            return subprocess.check_output(
-                ["git"] + cmd, cwd=repo_path, stderr=subprocess.DEVNULL
-            ).decode().strip()
-        except subprocess.CalledProcessError:
-            return None
-
     # Make sure remote refs are up to date
-    subprocess.run(["git", "fetch"], cwd=repo_path, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "fetch"], 
+        cwd=repo_path, 
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL, 
+        env={"GIT_TERMINAL_PROMPT": "0"}
+    )
 
     branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
     local_commit = run_git(["rev-parse", "HEAD"])
-    remote_commit = run_git(["rev-parse", "origin/" + branch])
+    remote_commit = run_git(["rev-parse", "origin/" + branch]) if branch else None
+
+    if not branch or not local_commit:
+        return None  # skip inaccessible repo
+
     ahead_behind = run_git(["rev-list", "--left-right", "--count", f"{branch}...origin/{branch}"])
     last_local_commit_date = run_git(["log", "-1", "--format=%ci", branch])
-    last_remote_commit_date = run_git(["log", "-1", "--format=%ci", f"origin/{branch}"])
+    last_remote_commit_date = run_git(["log", "-1", "--format=%ci", f"origin/{branch}"]) if remote_commit else None
 
     ahead, behind = (0, 0)
     if ahead_behind:
@@ -43,6 +45,7 @@ def get_git_info(repo_path: Path):
         "last_local_commit_date": last_local_commit_date,
         "last_remote_commit_date": last_remote_commit_date
     }
+
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
