@@ -6,6 +6,15 @@ from pathlib import Path
 
 app = FastAPI(title="Git Dashboard")
 
+def run_git(cmd):
+    try:
+        return subprocess.check_output(
+            ["git"] + cmd, cwd=repo_path, stderr=subprocess.DEVNULL, env={"GIT_TERMINAL_PROMPT": "0"}
+        ).decode().strip()
+    except subprocess.CalledProcessError:
+        return None
+
+
 def get_git_info(repo_path: Path):
     if not (repo_path / ".git").exists():
         return None
