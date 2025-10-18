@@ -1,11 +1,17 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-import subprocess
 from pathlib import Path
+import subprocess
+from threading import Thread
+from typing import Optional
+import time
 
 app = FastAPI(title="Git Dashboard")
 
+# --- Global cache to store repo info ---
+git_cache = {}
 
+# --- Utility functions ---
 def run_git(cmd, repo_path: Path):
     """Run git command safely without prompting for credentials."""
     try:
@@ -18,20 +24,12 @@ def run_git(cmd, repo_path: Path):
     except subprocess.CalledProcessError:
         return None
 
-
 def get_git_info(repo_path: Path):
     """Return detailed git info for a repo, or None if inaccessible."""
     if not (repo_path / ".git").exists():
         return None
 
-    subprocess.run(
-        ["git", "fetch"],
-        cwd=repo_path,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env={"GIT_TERMINAL_PROMPT": "0"}
-    )
-
+    # Only fetch remote in background (avoid blocking request)
     branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"], repo_path)
     local_commit = run_git(["rev-parse", "HEAD"], repo_path)
     remote_commit = run_git(["rev-parse", f"origin/{branch}"], repo_path) if branch else None
@@ -39,13 +37,13 @@ def get_git_info(repo_path: Path):
     if not branch or not local_commit:
         return None
 
+    ahead, behind = 0, 0
     ahead_behind = run_git(["rev-list", "--left-right", "--count", f"{branch}...origin/{branch}"], repo_path)
-    last_local_commit_date = run_git(["log", "-1", "--format=%ci", branch], repo_path)
-    last_remote_commit_date = run_git(["log", "-1", "--format=%ci", f"origin/{branch}"], repo_path) if remote_commit else None
-
-    ahead, behind = (0, 0)
     if ahead_behind:
         ahead, behind = map(int, ahead_behind.split())
+
+    last_local_commit_date = run_git(["log", "-1", "--format=%ci", branch], repo_path)
+    last_remote_commit_date = run_git(["log", "-1", "--format=%ci", f"origin/{branch}"], repo_path) if remote_commit else None
 
     return {
         "name": repo_path.name,
@@ -59,8 +57,23 @@ def get_git_info(repo_path: Path):
         "last_remote_commit_date": last_remote_commit_date
     }
 
+def update_repo_cache(repo_path: Path):
+    """Background thread: fetch remote and update cache."""
+    try:
+        # shallow fetch to avoid blocking
+        subprocess.run(
+            ["git", "fetch", "--all", "--prune", "--quiet", "--depth=1"],
+            cwd=repo_path,
+            env={"GIT_TERMINAL_PROMPT": "0"}
+        )
+    except Exception:
+        pass  # ignore fetch errors
 
-# --- Lightweight initial dashboard ---
+    info = get_git_info(repo_path)
+    if info:
+        git_cache[repo_path.name] = info
+
+# --- Routes ---
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     current_dir = Path(__file__).parent
@@ -72,7 +85,6 @@ def dashboard():
     <html>
     <head>
         <title>Git Dashboard</title>
-        <script defer src="https://umami.leanderziehm.com/script.js" data-website-id="66e46def-18be-4149-8bde-c9dab2b84208"></script>
         <style>
             body { font-family: Arial, sans-serif; background-color: #f7f7f7; }
             h1 { color: #333; }
@@ -91,11 +103,9 @@ def dashboard():
     <tr><th>Actions</th><th>Repo</th><th>Behind</th><th>Branch</th><th>Local Commit</th><th>Remote Commit</th><th>Last Local Commit</th><th>Last Remote Commit</th></tr>
     """
 
-    # Initially just render rows with "Loading..."
+    # Render initial rows with "Loading..."
     for name in repo_names:
-        html += f"<tr id='repo-{name}'>"
-        html += f"<td colspan='8'>Loading {name}...</td>"
-        html += "</tr>"
+        html += f"<tr id='repo-{name}'><td colspan='8'>Loading {name}...</td></tr>"
 
     html += "</table>"
 
@@ -131,7 +141,6 @@ def dashboard():
         }
     }
 
-    // Load each repo info in the background
     const repoNames = [""" + ",".join(f'"{n}"' for n in repo_names) + """];
     repoNames.forEach(fetchRepoInfo);
     </script>
@@ -140,29 +149,31 @@ def dashboard():
     html += "</body></html>"
     return HTMLResponse(html)
 
-
-# --- Endpoint to fetch detailed info asynchronously ---
 @app.get("/repo_info/{repo_name}")
 def repo_info(repo_name: str):
     repo_path = Path(__file__).parent.parent / repo_name
-    info = get_git_info(repo_path)
-    if info:
-        return JSONResponse(info)
-    return JSONResponse({"name": repo_name, "error": "No access"})
+    info: Optional[dict] = git_cache.get(repo_name)
 
+    if not info:
+        # Trigger background fetch
+        Thread(target=update_repo_cache, args=(repo_path,), daemon=True).start()
+        return JSONResponse({"name": repo_name, "status": "fetching..."})
 
-# --- Pull action ---
+    return JSONResponse(info)
+
 @app.post("/pull")
 def pull_repo(repo_path: str = Form(...)):
     repo = Path(repo_path)
     if repo.exists() and (repo / ".git").exists():
         try:
-            subprocess.check_output(
+            subprocess.run(
                 ["git", "pull"],
                 cwd=repo,
                 stderr=subprocess.DEVNULL,
                 env={"GIT_TERMINAL_PROMPT": "0"}
             )
+            # After pull, update cache
+            Thread(target=update_repo_cache, args=(repo,), daemon=True).start()
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull {repo}: {e}")
     return RedirectResponse("/", status_code=303)
