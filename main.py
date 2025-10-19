@@ -66,7 +66,9 @@ def update_repo_cache(repo_path: Path):
     if info:
         git_cache[repo_path.name] = info
         return info
-    return {"error": "Could not fetch repo"}
+    # Always return name even if fetch fails
+    return {"name": repo_path.name, "error": "Could not fetch repo"}
+
 
 # --- Routes ---
 @app.get("/", response_class=HTMLResponse)
@@ -122,11 +124,13 @@ def dashboard():
     }
 
     function updateRow(row, data) {
-        if(data.error) {
-            row.innerHTML = `<td colspan="8">${data.name}: ${data.error}</td>`;
+            if(data.error) {
+            const repoName = data.name || repoNameFallback; // fallback to known repo
+            row.innerHTML = `<td colspan="8">${repoName}: ${data.error}</td>`;
             row.className = '';
             return;
         }
+
         const rowClass = data.behind > 0 ? 'outdated' : '';
         row.className = rowClass;
         row.innerHTML = '';
