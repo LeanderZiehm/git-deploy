@@ -112,7 +112,7 @@ tr.error td { background-color: #ff9999 !important; transition: background 0.5s;
 
     html += "</table>"
 
-    html += f"""
+    html += """
 <script>
 const repoNames = [{','.join(f'"{n}"' for n in repo_names)}];
 
