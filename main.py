@@ -98,6 +98,11 @@ def dashboard():
             #fetch-all { margin-bottom: 10px; background-color: #5a9bd3; }
             .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(0,0,0,0.2); border-top-color:#333; border-radius:50%; animation:spin 0.6s linear infinite; margin-left:5px; vertical-align:middle; }
             @keyframes spin { to { transform: rotate(360deg); } }
+            tr.success td { background-color: #ccffcc !important; transition: background 0.5s; }
+tr.error td { background-color: #ff9999 !important; transition: background 0.5s; }
+tr.fetching td { opacity: 0.6; }
+tr.pulling td { opacity: 0.6; }
+
         </style>
     </head>
     <body>
@@ -113,46 +118,67 @@ def dashboard():
     html += "</table>"
     html += """
     <script>
-    const repoNames = [""" + ",".join(f'"{n}"' for n in repo_names) + """];
+const repoNames = [""" + ",".join(f'"{n}"' for n in repo_names) + """];
     
-    function createButton(text, cls, onClick) {
-        const btn = document.createElement('button');
-        btn.innerText = text;
-        btn.className = cls;
-        btn.onclick = onClick;
-        return btn;
+function createButton(text, cls, onClick) {
+    const btn = document.createElement('button');
+    btn.innerText = text;
+    btn.className = cls;
+    btn.onclick = onClick;
+    return btn;
+}
+
+function flashRow(row, className, duration=1000) {
+    row.classList.add(className);
+    setTimeout(() => row.classList.remove(className), duration);
+}
+
+function updateRow(row, data) {
+    if(data.error) {
+        const repoName = data.name || "Unknown";
+        console.log(`❌ ${repoName} error: ${data.error}`);
+        row.innerHTML = `<td colspan="8">${repoName}: ${data.error}</td>`;
+        row.className = 'error';
+        return;
     }
 
-    function updateRow(row, data) {
-            if(data.error) {
-            const repoName = data.name || repoNameFallback; // fallback to known repo
-            row.innerHTML = `<td colspan="8">${repoName}: ${data.error}</td>`;
-            row.className = '';
-            return;
-        }
+    const rowClass = data.behind > 0 ? 'outdated' : '';
+    row.className = rowClass;
 
-        const rowClass = data.behind > 0 ? 'outdated' : '';
-        row.className = rowClass;
-        row.innerHTML = '';
-        const actionsTd = document.createElement('td');
+    row.innerHTML = '';
+    const actionsTd = document.createElement('td');
 
-        const fetchBtn = createButton('Fetch', 'fetch', async () => {
-            row.classList.add('fetching');
-            fetchBtn.disabled = true;
-            const spinner = document.createElement('span');
-            spinner.className = 'spinner';
-            actionsTd.appendChild(spinner);
+    const fetchBtn = createButton('Fetch', 'fetch', async () => {
+        console.log(`🔄 Fetch clicked for ${data.name}`);
+        row.classList.add('fetching');
+        fetchBtn.disabled = true;
+        pullBtn.disabled = true;
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        actionsTd.appendChild(spinner);
+
+        try {
             const res = await fetch('/fetch_repo/' + data.name);
             const newData = await res.json();
             updateRow(row, newData);
-        });
-        const pullBtn = createButton('Pull', 'pull', async () => {
-            row.classList.add('pulling');
-            fetchBtn.disabled = true;
-            pullBtn.disabled = true;
-            const spinner = document.createElement('span');
-            spinner.className = 'spinner';
-            actionsTd.appendChild(spinner);
+            flashRow(row, 'success');
+            console.log(`✅ Fetch completed for ${data.name}`);
+        } catch(err) {
+            console.error(`❌ Fetch failed for ${data.name}`, err);
+            flashRow(row, 'error');
+        }
+    });
+
+    const pullBtn = createButton('Pull', 'pull', async () => {
+        console.log(`🔄 Pull clicked for ${data.name}`);
+        row.classList.add('pulling');
+        fetchBtn.disabled = true;
+        pullBtn.disabled = true;
+        const spinner = document.createElement('span');
+        spinner.className = 'spinner';
+        actionsTd.appendChild(spinner);
+
+        try {
             const res = await fetch('/pull_repo', {
                 method:'POST',
                 headers:{'Content-Type':'application/x-www-form-urlencoded'},
@@ -160,40 +186,49 @@ def dashboard():
             });
             const newData = await res.json();
             updateRow(row, newData);
-        });
-
-        actionsTd.appendChild(fetchBtn);
-        actionsTd.appendChild(pullBtn);
-        row.appendChild(actionsTd);
-        row.innerHTML += `<td>${data.name}</td>
-                          <td>${data.behind}</td>
-                          <td>${data.branch}</td>
-                          <td>${data.local_commit.substring(0,7)}</td>
-                          <td>${data.remote_commit ? data.remote_commit.substring(0,7) : 'N/A'}</td>
-                          <td>${data.last_local_commit_date}</td>
-                          <td>${data.last_remote_commit_date}</td>`;
-    }
-
-    async function fetchRepo(repoName) {
-        const row = document.getElementById('repo-' + repoName);
-        row.classList.add('fetching');
-        const res = await fetch('/fetch_repo/' + repoName);
-        const data = await res.json();
-        updateRow(row, data);
-        row.classList.remove('fetching');
-    }
-
-    async function fetchAll() {
-        for(const repo of repoNames) {
-            fetchRepo(repo);
+            flashRow(row, 'success');
+            console.log(`✅ Pull completed for ${data.name}`);
+        } catch(err) {
+            console.error(`❌ Pull failed for ${data.name}`, err);
+            flashRow(row, 'error');
         }
+    });
+
+    actionsTd.appendChild(fetchBtn);
+    actionsTd.appendChild(pullBtn);
+    row.appendChild(actionsTd);
+
+    row.innerHTML += `<td>${data.name}</td>
+                      <td>${data.behind}</td>
+                      <td>${data.branch}</td>
+                      <td>${data.local_commit.substring(0,7)}</td>
+                      <td>${data.remote_commit ? data.remote_commit.substring(0,7) : 'N/A'}</td>
+                      <td>${data.last_local_commit_date}</td>
+                      <td>${data.last_remote_commit_date}</td>`;
+}
+
+async function fetchRepo(repoName) {
+    const row = document.getElementById('repo-' + repoName);
+    console.log(`Fetching ${repoName}...`);
+    row.classList.add('fetching');
+    const res = await fetch('/fetch_repo/' + repoName);
+    const data = await res.json();
+    updateRow(row, data);
+    row.classList.remove('fetching');
+}
+
+async function fetchAll() {
+    for(const repo of repoNames) {
+        fetchRepo(repo);
     }
+}
 
-    document.getElementById('fetch-all').onclick = fetchAll;
+document.getElementById('fetch-all').onclick = fetchAll;
 
-    // Initial load
-    repoNames.forEach(fetchRepo);
-    </script>
+// Initial load
+repoNames.forEach(fetchRepo);
+</script>
+
     </body></html>
     """
     return HTMLResponse(html)
