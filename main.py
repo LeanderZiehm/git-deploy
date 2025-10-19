@@ -112,7 +112,7 @@ tr.error td { background-color: #ff9999 !important; transition: background 0.5s;
 
     html += "</table>"
 
-    html += """
+    html += f"""
 <script>
 const repoNames = [{','.join(f'"{n}"' for n in repo_names)}];
 
@@ -215,7 +215,7 @@ function updateRow(row, data) {{
 
 async function fetchRepo(repoName) {{
     const row = document.getElementById('repo-' + repoName);
-    console.log(`Fetching ${repoName}...`);
+    console.log(`Fetching ${{repoName}}...`);
     row.classList.add('fetching');
     const res = await fetch('/fetch_repo/' + repoName);
     const data = await res.json();
