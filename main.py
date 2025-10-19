@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pathlib import Path
 import subprocess
 from threading import Thread
-from typing import Optional
 
 app = FastAPI(title="Git Dashboard")
 
@@ -66,7 +65,6 @@ def update_repo_cache(repo_path: Path):
     if info:
         git_cache[repo_path.name] = info
         return info
-    # Always return name even if fetch fails
     return {"name": repo_path.name, "error": "Could not fetch repo"}
 
 
@@ -79,135 +77,143 @@ def dashboard():
     repo_names = [d.name for d in sibling_dirs]
 
     html = """
-    <html>
-    <head>
-        <title>Git Dashboard</title>
-        <style>
-            body { font-family: Arial, sans-serif; background-color: #f7f7f7; }
-            h1 { color: #333; }
-            table { border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-            th { background-color: #4682B4; color: white; }
-            tr:nth-child(even) { background-color: #f2f2f2; }
-            tr.outdated { background-color: #ffcccc; }
-            tr.fetching td, tr.pulling td { opacity: 0.6; }
-            button { border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; color: white; }
-            button.fetch { background-color: #4682B4; }
-            button.pull { background-color: #e94e77; }
-            button:disabled { background-color: #999; cursor: not-allowed; }
-            #fetch-all { margin-bottom: 10px; background-color: #5a9bd3; }
-            .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(0,0,0,0.2); border-top-color:#333; border-radius:50%; animation:spin 0.6s linear infinite; margin-left:5px; vertical-align:middle; }
-            @keyframes spin { to { transform: rotate(360deg); } }
-            tr.success td { background-color: #ccffcc !important; transition: background 0.5s; }
+<html>
+<head>
+<title>Git Dashboard</title>
+<style>
+body { font-family: Arial, sans-serif; background-color: #f7f7f7; }
+h1 { color: #333; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+th { background-color: #4682B4; color: white; }
+tr:nth-child(even) { background-color: #f2f2f2; }
+tr.outdated { background-color: #ffcccc; }
+tr.fetching td, tr.pulling td { opacity: 0.6; }
+button { border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; color: white; }
+button.fetch { background-color: #4682B4; }
+button.pull { background-color: #e94e77; }
+button:disabled { background-color: #999; cursor: not-allowed; }
+#fetch-all { margin-bottom: 10px; background-color: #5a9bd3; }
+.spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(0,0,0,0.2); border-top-color:#333; border-radius:50%; animation:spin 0.6s linear infinite; margin-left:5px; vertical-align:middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+tr.success td { background-color: #ccffcc !important; transition: background 0.5s; }
 tr.error td { background-color: #ff9999 !important; transition: background 0.5s; }
-tr.fetching td { opacity: 0.6; }
-tr.pulling td { opacity: 0.6; }
-
-        </style>
-    </head>
-    <body>
-    <h1>Git Dashboard</h1>
-    <button id="fetch-all">Fetch All</button>
-    <table id="repo-table">
-    <tr><th>Actions</th><th>Repo</th><th>Behind</th><th>Branch</th><th>Local Commit</th><th>Remote Commit</th><th>Last Local Commit</th><th>Last Remote Commit</th></tr>
-    """
+</style>
+</head>
+<body>
+<h1>Git Dashboard</h1>
+<button id="fetch-all">Fetch All</button>
+<table id="repo-table">
+<tr><th>Actions</th><th>Repo</th><th>Behind</th><th>Branch</th><th>Local Commit</th><th>Remote Commit</th><th>Last Local Commit</th><th>Last Remote Commit</th></tr>
+"""
 
     for name in repo_names:
         html += f"<tr id='repo-{name}'><td colspan='8'>Loading {name}...</td></tr>"
 
     html += "</table>"
-    html += """
-    <script>
-const repoNames = [""" + ",".join(f'"{n}"' for n in repo_names) + """];
-    
-function createButton(text, cls, onClick) {
-    const btn = document.createElement('button');
-    btn.innerText = text;
-    btn.className = cls;
-    btn.onclick = onClick;
-    return btn;
-}
 
-function flashRow(row, className, duration=1000) {
+    html += f"""
+<script>
+const repoNames = [{','.join(f'"{n}"' for n in repo_names)}];
+
+function flashRow(row, className, duration=1000) {{
     row.classList.add(className);
     setTimeout(() => row.classList.remove(className), duration);
-}
+}}
 
-function updateRow(row, data) {
-    if(data.error) {
+function updateRow(row, data) {{
+    row.innerHTML = '';
+    if(data.error) {{
         const repoName = data.name || "Unknown";
-        console.log(`❌ ${repoName} error: ${data.error}`);
-        row.innerHTML = `<td colspan="8">${repoName}: ${data.error}</td>`;
+        console.log(`❌ ${{repoName}} error: ${{data.error}}`);
+        const td = document.createElement('td');
+        td.colSpan = 8;
+        td.textContent = `${{repoName}}: ${{data.error}}`;
+        row.appendChild(td);
         row.className = 'error';
         return;
-    }
+    }}
 
-    const rowClass = data.behind > 0 ? 'outdated' : '';
-    row.className = rowClass;
+    row.className = data.behind > 0 ? 'outdated' : '';
 
-    row.innerHTML = '';
+    // Actions cell
     const actionsTd = document.createElement('td');
 
-    const fetchBtn = createButton('Fetch', 'fetch', async () => {
-        console.log(`🔄 Fetch clicked for ${data.name}`);
-        row.classList.add('fetching');
+    const fetchBtn = document.createElement('button');
+    fetchBtn.innerText = 'Fetch';
+    fetchBtn.className = 'fetch';
+    const pullBtn = document.createElement('button');
+    pullBtn.innerText = 'Pull';
+    pullBtn.className = 'pull';
+
+    fetchBtn.onclick = async () => {{
+        console.log(`🔄 Fetch clicked for ${{data.name}}`);
         fetchBtn.disabled = true;
         pullBtn.disabled = true;
+        row.classList.add('fetching');
         const spinner = document.createElement('span');
         spinner.className = 'spinner';
         actionsTd.appendChild(spinner);
 
-        try {
+        try {{
             const res = await fetch('/fetch_repo/' + data.name);
             const newData = await res.json();
             updateRow(row, newData);
             flashRow(row, 'success');
-            console.log(`✅ Fetch completed for ${data.name}`);
-        } catch(err) {
-            console.error(`❌ Fetch failed for ${data.name}`, err);
+            console.log(`✅ Fetch completed for ${{data.name}}`);
+        }} catch(err) {{
+            console.error(`❌ Fetch failed for ${{data.name}}`, err);
             flashRow(row, 'error');
-        }
-    });
+        }}
+    }};
 
-    const pullBtn = createButton('Pull', 'pull', async () => {
-        console.log(`🔄 Pull clicked for ${data.name}`);
-        row.classList.add('pulling');
+    pullBtn.onclick = async () => {{
+        console.log(`🔄 Pull clicked for ${{data.name}}`);
         fetchBtn.disabled = true;
         pullBtn.disabled = true;
+        row.classList.add('pulling');
         const spinner = document.createElement('span');
         spinner.className = 'spinner';
         actionsTd.appendChild(spinner);
 
-        try {
-            const res = await fetch('/pull_repo', {
+        try {{
+            const res = await fetch('/pull_repo', {{
                 method:'POST',
-                headers:{'Content-Type':'application/x-www-form-urlencoded'},
-                body: `repo_path=${encodeURIComponent(data.path)}`
-            });
+                headers:{{'Content-Type':'application/x-www-form-urlencoded'}},
+                body: `repo_path=${{encodeURIComponent(data.path)}}`
+            }});
             const newData = await res.json();
             updateRow(row, newData);
             flashRow(row, 'success');
-            console.log(`✅ Pull completed for ${data.name}`);
-        } catch(err) {
-            console.error(`❌ Pull failed for ${data.name}`, err);
+            console.log(`✅ Pull completed for ${{data.name}}`);
+        }} catch(err) {{
+            console.error(`❌ Pull failed for ${{data.name}}`, err);
             flashRow(row, 'error');
-        }
-    });
+        }}
+    }};
 
     actionsTd.appendChild(fetchBtn);
     actionsTd.appendChild(pullBtn);
     row.appendChild(actionsTd);
 
-    row.innerHTML += `<td>${data.name}</td>
-                      <td>${data.behind}</td>
-                      <td>${data.branch}</td>
-                      <td>${data.local_commit.substring(0,7)}</td>
-                      <td>${data.remote_commit ? data.remote_commit.substring(0,7) : 'N/A'}</td>
-                      <td>${data.last_local_commit_date}</td>
-                      <td>${data.last_remote_commit_date}</td>`;
-}
+    // Other columns
+    const cols = [
+        data.name,
+        data.behind,
+        data.branch,
+        data.local_commit.substring(0,7),
+        data.remote_commit ? data.remote_commit.substring(0,7) : 'N/A',
+        data.last_local_commit_date,
+        data.last_remote_commit_date
+    ];
+    for(const col of cols) {{
+        const td = document.createElement('td');
+        td.textContent = col;
+        row.appendChild(td);
+    }}
+}}
 
-async function fetchRepo(repoName) {
+async function fetchRepo(repoName) {{
     const row = document.getElementById('repo-' + repoName);
     console.log(`Fetching ${repoName}...`);
     row.classList.add('fetching');
@@ -215,23 +221,23 @@ async function fetchRepo(repoName) {
     const data = await res.json();
     updateRow(row, data);
     row.classList.remove('fetching');
-}
+}}
 
-async function fetchAll() {
-    for(const repo of repoNames) {
+async function fetchAll() {{
+    for(const repo of repoNames) {{
         fetchRepo(repo);
-    }
-}
+    }}
+}}
 
 document.getElementById('fetch-all').onclick = fetchAll;
-
-// Initial load
 repoNames.forEach(fetchRepo);
 </script>
 
-    </body></html>
-    """
+</body>
+</html>
+"""
     return HTMLResponse(html)
+
 
 @app.get("/fetch_repo/{repo_name}")
 def fetch_repo(repo_name: str):
@@ -240,6 +246,7 @@ def fetch_repo(repo_name: str):
     if not info:
         return JSONResponse({"name": repo_name, "error": "Cannot fetch"})
     return JSONResponse(info)
+
 
 @app.post("/pull_repo")
 def pull_repo(repo_path: str = Form(...)):
