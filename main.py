@@ -266,32 +266,3 @@ def pull_repo(repo_path: str = Form(...)):
 
 
 
-
-# -----------------------------
-# SSH Key Management Endpoint
-# -----------------------------
-AUTHORIZED_KEYS_FILE = Path.home() / ".ssh/authorized_keys"
-
-@app.post("/add_ssh_key")
-async def add_ssh_key(key: str = Form(...)):
-    """
-    Add a new SSH public key to ~/.ssh/authorized_keys
-    """
-    if not key.startswith(("ssh-rsa", "ssh-ed25519", "ecdsa-sha2-nistp256")):
-        raise HTTPException(status_code=400, detail="Invalid SSH public key format.")
-
-    ssh_dir = AUTHORIZED_KEYS_FILE.parent
-    ssh_dir.mkdir(mode=0o700, exist_ok=True)
-
-    existing_keys = set()
-    if AUTHORIZED_KEYS_FILE.exists():
-        existing_keys = set(AUTHORIZED_KEYS_FILE.read_text().splitlines())
-
-    if key in existing_keys:
-        return {"status": "already_exists", "message": "Key already exists."}
-
-    with AUTHORIZED_KEYS_FILE.open("a") as f:
-        f.write(key.strip() + "\n")
-
-    AUTHORIZED_KEYS_FILE.chmod(0o600)
-    return {"status": "success", "message": "Key added successfully."}
